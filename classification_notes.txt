@@ -1,0 +1,75 @@
+-- select columns produced by extract_semantic_categories
+
+ SELECT
+        f.key::varchar as COLUMN_NAME,
+        f.value:"privacy_category"::varchar as privacy_category,  
+        f.value:"semantic_category"::varchar as semantic_category,
+        f.value:"extra_info":"probability"::number(10,2) as probability,
+        f.value:"extra_info":"alternates"::variant as alternates
+    FROM
+        TABLE(FLATTEN(EXTRACT_SEMANTIC_CATEGORIES('emp_mst')::VARIANT)) AS f;
+
+-- creation of classification_results table through usage of EXTRACT_SEMANTIC_CATEGORIES
+
+create or replace table classification_results as
+(SELECT
+    f.key::varchar as column_name,    
+    f.value:"privacy_category"::varchar as privacy_category,  
+    f.value:"semantic_category"::varchar as semantic_category,
+    f.value:"extra_info":"probability"::number(10,2) as probability,
+    f.value:"extra_info":"alternates"::variant as alternates
+FROM
+TABLE(FLATTEN(EXTRACT_SEMANTIC_CATEGORIES('DEV_DG_DATABASE.DEV_DG_SCHEMA.employee_master1')::VARIANT)) as f );     
+
+
+-- update classification_results after running ASSOCIATE_SEMANTIC_CATEGORY_TAGS procedure
+
+UPDATE classification_results SET V =
+    OBJECT_INSERT(V,'SSN',OBJECT_INSERT(
+        OBJECT_INSERT(V: SSN, 'semantic_category', 'NAME', TRUE),
+        'privacy_category', 'IDENTIFIER', TRUE),
+        TRUE
+        );
+
+
+-- create classification_results_main table to store "table_name"
+
+create table classification_results_main
+(table_name varchar,
+column_name varchar,
+privacy_category varchar,
+semantic_category varchar,
+probability number,
+alternates varchar
+);
+  
+
+-- privacy category provided by snowflake
+
+select system$get_tag_allowed_values('snowflake.core.privacy_category');  
+
+/*
+["IDENTIFIER","QUASI_IDENTIFIER","SENSITIVE","INSENSITIVE"]
+*/
+
+
+select system$get_tag_allowed_values('snowflake.core.semantic_category');
+
+/*
+["ADMINISTRATIVE_AREA_1","ADMINISTRATIVE_AREA_2","AGE","BANK_ACCOUNT","CITY","COUNTRY","DATE_OF_BIRTH","DRIVERS_LICENSE","EMAIL","ETHNICITY","GENDER","IBAN","IMEI","IP_ADDRESS","LATITUDE","LAT_LONG","LONGITUDE","MARITAL_STATUS","MEDICARE_NUMBER","NAME","NATIONAL_IDENTIFIER","OCCUPATION","ORGANIZATION_IDENTIFIER","PASSPORT","PAYMENT_CARD","PHONE_NUMBER","POSTAL_CODE","SALARY","STREET_ADDRESS","TAX_IDENTIFIER","URL","US_BANK_ACCOUNT","US_CITY","US_COUNTY","US_DRIVERS_LICENSE","US_PASSPORT","US_POSTAL_CODE","US_SSN","US_STATE_OR_TERRITORY","US_STREET_ADDRESS","VIN","YEAR_OF_BIRTH"]
+*/
+
+
+-- this applies tags (see the table structure to find the tags applied by the system)
+
+CALL ASSOCIATE_SEMANTIC_CATEGORY_TAGS('emp_mst',
+                                      EXTRACT_SEMANTIC_CATEGORIES('emp_mst'));
+
+
+select * from snowflake.account_usage.tag_references;
+
+select * from snowflake.account_usage.tags;
+
+
+
+
